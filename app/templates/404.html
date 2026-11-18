@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <h1>404 — 资源不存在</h1>
+  <p class="muted">趟次或草稿不存在（草稿确认后即删除）。</p>
+  <a class="btn" href="{{ url_for('index') }}">返回首页</a>
+</div>
+{% endblock %}

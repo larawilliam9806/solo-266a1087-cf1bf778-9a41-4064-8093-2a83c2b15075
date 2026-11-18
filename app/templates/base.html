@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}冷链温度合规{% endblock %}</title>
+  <style>
+    :root { --bd:#d8dde3; --hot:#c0392b; --unk:#b7791f; --ok:#1e7e34; --bg:#f5f7fa; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; background:var(--bg); color:#1f2933; }
+    header { background:#12343b; color:#fff; padding:14px 28px; }
+    header a { color:#9fd8df; text-decoration:none; }
+    main { max-width:1100px; margin:24px auto; padding:0 20px; }
+    .card { background:#fff; border:1px solid var(--bd); border-radius:10px; padding:20px 24px; margin-bottom:20px; }
+    h1 { font-size:20px; margin:0 0 14px; } h2 { font-size:16px; margin:18px 0 10px; }
+    table { border-collapse:collapse; width:100%; font-size:13px; }
+    th,td { border:1px solid var(--bd); padding:7px 10px; text-align:left; vertical-align:top; }
+    th { background:#eef2f5; }
+    .hot { color:var(--hot); font-weight:600; } .unk { color:var(--unk); font-weight:600; } .ok { color:var(--ok); }
+    .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+    .badge-hot { background:#fde2dd; color:var(--hot);} .badge-unk { background:#fdf0d5; color:var(--unk);}
+    .badge-ok { background:#dcf3e3; color:var(--ok);} .badge-rev { background:#e3eafd; color:#2b4acb;}
+    .flash { padding:10px 16px; border-radius:8px; margin-bottom:14px; font-size:14px; }
+    .flash-error { background:#fde2dd; border:1px solid #f3b6ac; }
+    .flash-success { background:#dcf3e3; border:1px solid #a8dcba; }
+    .flash-info { background:#e3eafd; border:1px solid #b7c6f5; }
+    label { display:block; font-size:13px; font-weight:600; margin:10px 0 4px; }
+    input[type=text],input[type=number],input[type=file] { width:100%; padding:8px; border:1px solid var(--bd); border-radius:6px; font-size:14px; }
+    button,.btn { display:inline-block; background:#12343b; color:#fff; border:0; border-radius:6px; padding:9px 20px; font-size:14px; cursor:pointer; text-decoration:none; }
+    button.secondary,.btn.secondary { background:#6b7a85; } button.warn { background:#b7791f; }
+    .muted { color:#6b7280; font-size:12px; }
+    .seg { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .warn-box { border:1px solid #e0a458; background:#fdf6ec; padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:13px; }
+    code { background:#eef2f5; padding:1px 5px; border-radius:4px; }
+  </style>
+</head>
+<body>
+<header><strong>❄ 冷链运输温度合规平台</strong> &nbsp;<a href="{{ url_for('index') }}">返回趟次列表</a></header>
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}<div class="flash flash-{{ category }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

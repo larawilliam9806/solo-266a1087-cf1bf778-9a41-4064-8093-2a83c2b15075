@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ trip.name }} · 正式结论{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>{{ trip.name }} <span class="badge badge-rev">rev {{ trip.revision }}</span>
+    <span class="muted">确认于 {{ trip.confirmed_at }}（UTC）</span></h1>
+  <p class="muted">
+    趟次 ID <code>{{ trip.id }}</code> ｜ 温度上限 <strong>{{ trip.temp_limit }} ℃</strong> ｜
+    读数 {{ trip.readings|length }} 条 ｜ 箱号 {{ trip.rides|length }} 个 ｜
+    <a href="{{ url_for('api_results', trip_id=trip.id) }}">JSON 接口</a>
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>箱号</th><th>在车时段 (UTC)</th>
+        <th>超温时长</th><th>未知时长</th><th>超温时间段</th><th>未知时间段</th><th>判定</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in trip.results %}
+      {% set ride = trip.rides[loop.index0] %}
+      <tr>
+        <td><strong>{{ r.box }}</strong></td>
+        <td class="seg">{{ ride.loaded_at|fmt }}<br>→ {{ ride.unloaded_at|fmt }}</td>
+        <td class="hot">{{ r.hot_seconds|duration }}</td>
+        <td class="unk">{{ r.unknown_seconds|duration }}</td>
+        <td class="seg">
+          {% for s in r.hot_segments %}
+            {{ s.start|fmt }} → {{ s.end|fmt }}（{{ s.temperature }}℃，{{ (s.end-s.start)|duration }}）<br>
+          {% else %}<span class="muted">无</span>{% endfor %}
+        </td>
+        <td class="seg">
+          {% for s in r.unknown_segments %}
+            {{ s.start|fmt }} → {{ s.end|fmt }}（{{ (s.end-s.start)|duration }}）<br>
+          {% else %}<span class="muted">无</span>{% endfor %}
+        </td>
+        <td>
+          {% if r.unknown_seconds > 0 %}<span class="badge badge-unk">存在未知</span>
+          {% elif r.hot_seconds > 0 %}<span class="badge badge-hot">超温</span>
+          {% else %}<span class="badge badge-ok">合格</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:10px">时长格式 时:分:秒；未知时段不按合格处理。</p>
+</div>
+
+<div class="card">
+  <h2>发起修订</h2>
+  <p class="muted">上传修正后的温度/装卸文件（可只传其中一个），先预览变化，确认后整趟替换为 rev {{ trip.revision + 1 }}。</p>
+  <form method="post" action="{{ url_for('revise', trip_id=trip.id) }}" enctype="multipart/form-data">
+    <div class="grid2">
+      <div>
+        <label>趟次名称</label>
+        <input type="text" name="name" value="{{ trip.name }}">
+        <label>温度上限（℃）</label>
+        <input type="number" step="0.1" name="temp_limit" value="{{ trip.temp_limit }}">
+      </div>
+      <div>
+        <label>替换温度 CSV（留空则不替换）</label>
+        <input type="file" name="temp_file" accept=".csv,text/csv">
+        <label>替换装卸 CSV（留空则不替换）</label>
+        <input type="file" name="handling_file" accept=".csv,text/csv">
+      </div>
+    </div>
+    <p style="margin-top:14px"><button type="submit" class="warn">上传修正并预览</button></p>
+  </form>
+  {% if has_draft %}<p class="muted">该趟次存在未确认的草稿预览，<a href="{{ url_for('preview', trip_id=trip.id) }}">前往预览页</a>。</p>{% endif %}
+</div>
+{% endblock %}

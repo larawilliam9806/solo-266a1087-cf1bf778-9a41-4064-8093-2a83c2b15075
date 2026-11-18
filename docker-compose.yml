@@ -1,0 +1,21 @@
+services:
+  web:
+    build: .
+    image: coldchain-flask:latest
+    container_name: coldchain-web
+    ports:
+      - "8000:8000"
+    volumes:
+      - coldchain-data:/app/data
+    environment:
+      # 数据库文件固定在挂载卷内，容器重启后已确认结论与草稿均保留
+      DATABASE: /app/data/coldchain.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=5)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  coldchain-data:

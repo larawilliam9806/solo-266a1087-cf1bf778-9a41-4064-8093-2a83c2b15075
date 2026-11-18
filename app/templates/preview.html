@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}修订预览 · {{ draft.name }}{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>修订预览：{{ draft.name }} <span class="badge badge-rev">基于 rev {{ draft.expected_revision }}{% if confirmed %} → 确认后成为 rev {{ draft.expected_revision + 1 }}{% else %} → 确认后成为 rev 1{% endif %}</span></h1>
+  <p class="muted">
+    温度上限 <strong>{{ draft.temp_limit }} ℃</strong>；
+    读数 {{ draft.readings|length }} 条，箱号 {{ draft.rides|length }} 个。
+    间隔规则：相邻读数 ≤10 分钟由前一读数代表该段；&gt;10 分钟的整段及边界缺测均计为未知。
+  </p>
+  {% if stale %}
+  <div class="warn-box">
+    ⚠ 本预览基于 rev {{ draft.expected_revision }}，但正式版本已推进到 rev {{ confirmed.revision }}。
+    直接确认会被拒绝；请基于最新版本重新上传修正文件。
+  </div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>箱号</th><th>在车时段 (UTC)</th>
+        <th>超温时长</th><th>未知时长</th><th>超温时间段</th><th>未知时间段</th><th>判定</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for box, load_ts, unload_ts in draft.rides %}
+      {% set r = draft.results[box] %}
+      <tr>
+        <td><strong>{{ box }}</strong></td>
+        <td class="seg">{{ load_ts|fmt }}<br>→ {{ unload_ts|fmt }}</td>
+        <td class="hot">{{ r.hot_seconds|duration }}</td>
+        <td class="unk">{{ r.unknown_seconds|duration }}</td>
+        <td class="seg">
+          {% for s in r.hot_segments %}
+            {{ s.start|fmt }} → {{ s.end|fmt }}（{{ s.temperature }}℃，{{ (s.end-s.start)|duration }}）<br>
+          {% else %}<span class="muted">无</span>{% endfor %}
+        </td>
+        <td class="seg">
+          {% for s in r.unknown_segments %}
+            {{ s.start|fmt }} → {{ s.end|fmt }}（{{ (s.end-s.start)|duration }}）<br>
+          {% else %}<span class="muted">无</span>{% endfor %}
+        </td>
+        <td>
+          {% if r.unknown_seconds > 0 %}<span class="badge badge-unk">存在未知</span>
+          {% elif r.hot_seconds > 0 %}<span class="badge badge-hot">超温</span>
+          {% else %}<span class="badge badge-ok">合格</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>修正后重新预览（只重新上传需要替换的文件，其余沿用当前数据）</h2>
+  <form method="post" action="{{ url_for('revise', trip_id=draft.trip_id) }}" enctype="multipart/form-data">
+    <div class="grid2">
+      <div>
+        <label>趟次名称</label>
+        <input type="text" name="name" value="{{ draft.name }}">
+        <label>温度上限（℃）</label>
+        <input type="number" step="0.1" name="temp_limit" value="{{ draft.temp_limit }}">
+      </div>
+      <div>
+        <label>替换温度 CSV（留空则不替换）</label>
+        <input type="file" name="temp_file" accept=".csv,text/csv">
+        <label>替换装卸 CSV（留空则不替换；删掉的箱号确认后不再保留旧结论）</label>
+        <input type="file" name="handling_file" accept=".csv,text/csv">
+      </div>
+    </div>
+    <p style="margin-top:14px">
+      <button type="submit" class="warn">重新计算预览</button>
+    </p>
+  </form>
+
+  <form method="post" action="{{ url_for('confirm', trip_id=draft.trip_id) }}" style="margin-top:8px">
+    <button type="submit" {% if stale %}disabled title="预览已过期，请重新修正"{% endif %}>
+      确认并整趟替换正式结论
+    </button>
+    {% if confirmed %}
+      <a class="btn secondary" href="{{ url_for('trip_detail', trip_id=draft.trip_id) }}">放弃预览，查看当前正式版 rev {{ confirmed.revision }}</a>
+    {% else %}
+      <a class="btn secondary" href="{{ url_for('index') }}">放弃预览</a>
+    {% endif %}
+    <p class="muted" style="margin-top:8px">确认在单个数据库事务内完成：同修订号并发确认只有一次成功；查询只见完整旧版或完整新版。</p>
+  </form>
+</div>
+{% endblock %}
