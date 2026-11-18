@@ -47,6 +47,15 @@
 </div>
 
 <div class="card">
+  <h2>记录仪校时核查</h2>
+  <p class="muted">
+    记录仪时钟走偏会让测温记录与装卸时刻错位。上传门磁事件 CSV（记录仪显示的 UTC 时刻），
+    以 rev {{ trip.revision }} 各箱装卸时刻去重作锚点，核查记录仪的整秒固定偏移；只读，不改写正式结论。
+  </p>
+  <p><a class="btn" href="{{ url_for('clock_check', trip_id=trip.id) }}">前往校时核查</a></p>
+</div>
+
+<div class="card">
   <h2>发起修订</h2>
   <p class="muted">上传修正后的温度/装卸文件（可只传其中一个），先预览变化，确认后整趟替换为 rev {{ trip.revision + 1 }}。</p>
   <form method="post" action="{{ url_for('revise', trip_id=trip.id) }}" enctype="multipart/form-data">

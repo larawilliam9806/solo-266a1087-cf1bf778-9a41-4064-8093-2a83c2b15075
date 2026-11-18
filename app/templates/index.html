@@ -44,7 +44,8 @@
         <td>{{ t.temp_limit }} ℃</td>
         <td>{{ t.boxes }}</td>
         <td>{{ t.confirmed_at }}</td>
-        <td><a class="btn" href="{{ url_for('trip_detail', trip_id=t.id) }}">查看结论</a></td>
+        <td><a class="btn" href="{{ url_for('trip_detail', trip_id=t.id) }}">查看结论</a>
+          <a class="btn secondary" href="{{ url_for('clock_check', trip_id=t.id) }}">校时核查</a></td>
       </tr>
     {% endfor %}
     </tbody>

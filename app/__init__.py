@@ -12,8 +12,12 @@ from flask import (
 )
 
 from . import storage
+from .clockcheck import (
+    MAX_ANCHORS, MAX_EVENTS, MAX_SHIFT_SECONDS, MIN_PAIRS, PAIR_TOLERANCE_SECONDS,
+    build_anchors, run_check,
+)
 from .engine import analyze_all
-from .parser import CSVError, parse_handling_csv, parse_temperature_csv
+from .parser import CSVError, parse_door_events_csv, parse_handling_csv, parse_temperature_csv
 
 
 def create_app(db_path: str | Path | None = None) -> Flask:
@@ -226,6 +230,71 @@ def create_app(db_path: str | Path | None = None) -> Flask:
             mimetype="application/json",
         )
 
+    # ---------- 记录仪校时核查（只读，不改写正式结论） ----------
+
+    def _clock_check_context(trip: dict) -> dict:
+        """组装核查页公共上下文。锚点与修订号来自同一次 get_trip 快照，
+        核查与修订交错时也不会混用不同版本的锚点和修订号。"""
+        anchors = build_anchors(trip["rides"])
+        return {
+            "trip": trip,
+            "anchors": anchors,
+            "limits": {
+                "max_events": MAX_EVENTS,
+                "max_anchors": MAX_ANCHORS,
+                "max_shift_minutes": MAX_SHIFT_SECONDS // 60,
+                "tolerance": PAIR_TOLERANCE_SECONDS,
+                "min_pairs": MIN_PAIRS,
+            },
+        }
+
+    @app.route("/trips/<trip_id>/clock-check")
+    def clock_check(trip_id: str):
+        try:
+            trip = storage.get_trip(trip_id)
+        except storage.NotFound:
+            abort(404)
+        return render_template("clock_check.html", report=None,
+                               **_clock_check_context(trip))
+
+    @app.route("/trips/<trip_id>/clock-check", methods=["POST"])
+    def clock_check_run(trip_id: str):
+        # 单次只读事务取出修订号与该版装卸记录，二者始终同属一个版本
+        try:
+            trip = storage.get_trip(trip_id)
+        except storage.NotFound:
+            abort(404)
+        ctx = _clock_check_context(trip)
+        anchors = ctx["anchors"]
+
+        def _retry(message: str):
+            flash(message, "error")
+            return redirect(url_for("clock_check", trip_id=trip_id))
+
+        if not anchors:
+            return _retry("该版本没有任何装卸时刻可作锚点，无法进行校时核查")
+        if len(anchors) > MAX_ANCHORS:
+            return _retry(
+                f"该版本装卸时刻去重后有 {len(anchors)} 个锚点，"
+                f"超过单次 {MAX_ANCHORS} 个上限，请拆分核查"
+            )
+        content = _read_upload("events_file")
+        if content is None:
+            return _retry("请上传门磁事件 CSV（记录仪显示的 UTC 时刻）")
+        try:
+            events = parse_door_events_csv(content)
+        except CSVError as exc:
+            # 上传/解析失败仅提示，不触碰正式结论
+            return _retry(str(exc))
+        if len(events) > MAX_EVENTS:
+            return _retry(
+                f"门磁事件共 {len(events)} 条，超过单次 {MAX_EVENTS} 条上限，请拆分后重试"
+            )
+        report = run_check(events, anchors)
+        return render_template(
+            "clock_check.html", report=report, events=events, **ctx,
+        )
+
     @app.errorhandler(404)
     def not_found(_):
         return render_template("404.html"), 404
@@ -241,5 +310,14 @@ def create_app(db_path: str | Path | None = None) -> Flask:
         h, rem = divmod(seconds, 3600)
         m, s = divmod(rem, 60)
         return f"{sign}{h:d}:{m:02d}:{s:02d}"
+
+    @app.template_filter("offset")
+    def fmt_offset(seconds: int) -> str:
+        """整秒偏移的可读形式：+300 秒 / -45 秒 / 0 秒。"""
+        if seconds > 0:
+            return f"+{seconds} 秒"
+        if seconds < 0:
+            return f"-{abs(seconds)} 秒"
+        return "0 秒"
 
     return app

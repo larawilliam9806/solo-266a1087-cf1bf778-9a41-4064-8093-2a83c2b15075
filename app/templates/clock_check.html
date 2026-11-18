@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}校时核查 · {{ trip.name }}{% endblock %}
+{% block body %}
+<div class="card">
+  <h1>记录仪校时核查：{{ trip.name }}
+    <span class="badge badge-rev">锚点取自 rev {{ trip.revision }}</span></h1>
+  <p class="muted">
+    趟次 ID <code>{{ trip.id }}</code> ｜
+    <a href="{{ url_for('trip_detail', trip_id=trip.id) }}">返回正式结论</a>
+  </p>
+  <p class="muted">
+    规则：在 ±{{ limits.max_shift_minutes }} 分钟内寻找整秒固定偏移 δ（记录仪显示时刻 + δ ≈ 真实 UTC 时刻）；
+    偏移后的事件与锚点相差 ≤{{ limits.tolerance }} 秒才可配对；各事件与锚点至多使用一次，配对保持时间先后；
+    按配对数最多、总时差最小选偏移，至少 {{ limits.min_pairs }} 对才判定。
+    单次最多 {{ limits.max_events }} 条事件、{{ limits.max_anchors }} 个锚点。
+    <strong>核查只读，不会改写正式读数与结论。</strong>
+  </p>
+</div>
+
+{% if report %}
+{# ================= 核查报告 ================= #}
+<div class="card">
+  <h2>核查报告 <span class="badge badge-rev">基于 rev {{ trip.revision }}</span></h2>
+  <p class="muted">
+    门磁事件 {{ report.event_count }} 条 ｜ 锚点 {{ report.anchor_count }} 个 ｜
+    搜索窗 ±{{ report.max_shift // 60 }} 分钟整秒 ｜ 配对容差 {{ report.tolerance }} 秒
+  </p>
+
+  {% if report.status == "ok" %}
+  <div class="flash flash-success" style="font-size:15px">
+    ✔ 唯一最优偏移：<strong>δ = {{ report.offset|offset }}</strong>
+    （{{ report.offset|duration }}）——
+    {% if report.offset > 0 %}记录仪偏慢 {{ report.offset }} 秒，显示时刻加 {{ report.offset }} 秒后为真实时刻
+    {% elif report.offset < 0 %}记录仪偏快 {{ -report.offset }} 秒，显示时刻减 {{ -report.offset }} 秒后为真实时刻
+    {% else %}记录仪与 UTC 无明显偏移{% endif %}。
+    共配对 {{ report.pairs|length }} 对，总时差 {{ report.best_cost }} 秒。
+  </div>
+
+  <h2>配对证据（按时间先后）</h2>
+  <table>
+    <thead>
+      <tr><th>#</th><th>事件</th><th>记录仪显示时刻</th><th>校正后时刻（+δ）</th><th>配对锚点（rev {{ trip.revision }}）</th><th>偏差</th></tr>
+    </thead>
+    <tbody>
+      {% for p in report.pairs %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>
+          {% if p.event.event %}{{ p.event.event }}{% endif %}
+          {% if p.event.box %}<span class="muted">{{ p.event.box }}</span>{% endif %}
+          {% if not p.event.event and not p.event.box %}<span class="muted">第 {{ p.event.row }} 行</span>{% endif %}
+        </td>
+        <td class="seg">{{ p.event.ts|fmt }}</td>
+        <td class="seg">{{ p.shifted_ts|fmt }}</td>
+        <td class="seg">{{ p.anchor_ts|fmt }}</td>
+        <td class="seg">{{ p.diff }} 秒</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="warn-box">
+    <strong>⚠ 无法得出唯一偏移，待人工核查：</strong>
+    <ul style="margin:6px 0 0 18px">
+      {% for reason in report.reasons %}<li>{{ reason }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% if report.candidate_ranges %}
+  <h2>并列候选偏移（{{ report.tied_count }} 个整秒）</h2>
+  <p class="muted">
+    以下整秒偏移同为最优：配对 {{ report.best_count }} 对、总时差 {{ report.best_cost }} 秒。
+  </p>
+  <table>
+    <thead><tr><th>候选偏移区间（整秒 δ）</th><th>区间内偏移个数</th></tr></thead>
+    <tbody>
+      {% for start, end in report.candidate_ranges[:50] %}
+      <tr>
+        <td class="seg">
+          {% if start == end %}{{ start|offset }}{% else %}{{ start|offset }} ~ {{ end|offset }}{% endif %}
+        </td>
+        <td>{{ end - start + 1 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if report.candidate_ranges|length > 50 %}
+  <p class="muted">仅列出前 50 段，共 {{ report.candidate_ranges|length }} 段。</p>
+  {% endif %}
+  {% endif %}
+  {% endif %}
+
+  {% if report.status == "ok" and report.unpaired_events %}
+  <h2>未配对事件（{{ report.unpaired_events|length }} 条）</h2>
+  <table>
+    <thead><tr><th>事件</th><th>记录仪显示时刻</th><th>校正后时刻（+δ）</th></tr></thead>
+    <tbody>
+      {% for e in report.unpaired_events %}
+      <tr>
+        <td>
+          {% if e.event %}{{ e.event }}{% endif %}
+          {% if e.box %}<span class="muted">{{ e.box }}</span>{% endif %}
+          {% if not e.event and not e.box %}<span class="muted">第 {{ e.row }} 行</span>{% endif %}
+        </td>
+        <td class="seg">{{ e.ts|fmt }}</td>
+        <td class="seg">{{ (e.ts + report.offset)|fmt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if report.status == "ok" and report.unpaired_anchors %}
+  <h2>未配对锚点（{{ report.unpaired_anchors|length }} 个）</h2>
+  <p class="seg">
+    {% for a in report.unpaired_anchors %}{{ a|fmt }}<br>{% endfor %}
+  </p>
+  {% endif %}
+
+  <p class="muted" style="margin-top:12px">
+    本报告基于 rev {{ trip.revision }} 的装卸时刻（去重后作锚点），仅供核查参考；
+    未改写任何正式读数与结论。若期间发生修订，请重新上传核查以使用最新版本锚点。
+  </p>
+  <p>
+    <a class="btn secondary" href="{{ url_for('clock_check', trip_id=trip.id) }}">重新核查</a>
+    <a class="btn secondary" href="{{ url_for('trip_detail', trip_id=trip.id) }}">返回正式结论</a>
+  </p>
+</div>
+
+{% else %}
+{# ================= 上传表单 ================= #}
+<div class="card">
+  <h2>上传门磁事件 CSV</h2>
+  <p class="muted">
+    当前版本 rev {{ trip.revision }} 的装卸时刻去重后共 <strong>{{ anchors|length }}</strong> 个锚点：
+  </p>
+  <p class="seg">
+    {% for a in anchors %}{{ a|fmt }}<br>{% endfor %}
+  </p>
+  {% if anchors|length == 0 %}
+  <div class="warn-box">⚠ 该版本没有任何装卸时刻可作锚点，无法进行校时核查。</div>
+  {% elif anchors|length > limits.max_anchors %}
+  <div class="warn-box">
+    ⚠ 锚点 {{ anchors|length }} 个，超过单次 {{ limits.max_anchors }} 个上限，无法核查。
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('clock_check_run', trip_id=trip.id) }}"
+        enctype="multipart/form-data">
+    <label>门磁事件 CSV（列：event_time；event、box 可选；时刻为记录仪显示的 UTC 时刻，≤{{ limits.max_events }} 条）</label>
+    <input type="file" name="events_file" accept=".csv,text/csv" required>
+    <p style="margin-top:14px">
+      <button type="submit" {% if anchors|length == 0 or anchors|length > limits.max_anchors %}disabled title="锚点数量不满足核查条件"{% endif %}>
+        开始校时核查
+      </button>
+    </p>
+  </form>
+  <p class="muted" style="margin-top:8px">
+    上传失败（格式错误、超限等）只会提示，不影响正式结论。
+  </p>
+</div>
+{% endif %}
+{% endblock %}
